@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Advanced Investment Dashboard</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script crossorigin src="https://unpkg.com/react@18.2.0/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/prop-types@15.8.1/prop-types.min.js"></script>
+<script src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://unpkg.com/lucide@latest"></script>
+
+<style>
+body { 
+    background-color: #f2f4f6; 
+    color: #191f28; 
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+.toss-card {
+    background-color: #ffffff;
+    border-radius: 24px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.toss-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.06);
+}
+.recharts-tooltip-wrapper { pointer-events: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useMemo } = React;
+const { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } = Recharts;
+
+const Icon = ({ name, size = 20, className = "" }) => {
+    const icons = {
+        TrendingUp: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline><polyline points="17 6 23 6 23 12"></polyline></svg>,
+        Activity: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>,
+        Filter: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>,
+        RefreshCw: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path><path d="M21 3v5h-5"></path><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path><path d="M8 21H3v-5"></path></svg>,
+        Flame: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"></path></svg>,
+        ExternalLink: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>,
+        Percent: <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="19" y1="5" x2="5" y2="19"></line><circle cx="6.5" cy="6.5" r="2.5"></circle><circle cx="17.5" cy="17.5" r="2.5"></circle></svg>
+    };
+    return icons[name] || null;
+};
+
+// [변경됨] 요청하신 순서와 명칭으로 그룹 재정의
+const ASSET_GROUPS = {
+    MACRO_RISK: { // 1. 매크로 (기존 매크로/리스크)
+        label: "매크로",
+        items: [
+            { ticker: 'BTC-USD', name: '비트코인', color: '#f59e0b' },
+            { ticker: 'TLT', name: '장기채', color: '#ef4444' },
+            { ticker: 'SHY', name: '단기채(1-3y)', color: '#64748b' },
+            { ticker: 'SGOV', name: '초단기채(0-3m)', color: '#75ea08' },
+            { ticker: 'HYG', name: '고수익 부실 회사채', color: '#8b5cf6' },
+            { ticker: 'GLD', name: '금', color: '#eab308' },
+            { ticker: 'SLV', name: '은', color: '#94a3b8' },
+            { ticker: 'CPER', name: '구리(경기선행)', color: '#d97706' },
+            { ticker: 'DBC', name: '원자재종합', color: '#78350f' },
+            { ticker: 'UUP', name: '달러', color: '#22c55e' },
+            { ticker: 'VXUS', name: '글로벌', color: '#64748b' },
+            { ticker: 'EEM', name: '신흥국(Emerging)', color: '#0ea5e9' },
+        ]
+    },
+    SECTORS: { // 2. 섹터 (미국 섹터 -> 섹터)
+        label: "섹터",
+        items: [
+            { ticker: 'XLK', name: '기술', color: '#3b82f6' },
+            { ticker: 'XLV', name: '헬스케어', color: '#ec4899' },
+            { ticker: 'XLF', name: '금융', color: '#22c55e' },
+            { ticker: 'XLY', name: '임의소비재', color: '#f97316' },
+            { ticker: 'XLP', name: '필수소비재', color: '#eab308' },
+            { ticker: 'XLE', name: '에너지', color: '#ef4444' },
+            { ticker: 'XLI', name: '산업재', color: '#a855f7' },
+            { ticker: 'XLB', name: '소재', color: '#14b8a6' },
+            { ticker: 'XLRE', name: '부동산', color: '#6366f1' },
+            { ticker: 'VNQ', name: '부동산(리츠포함)', color: '#818cf8' }, // [추가됨] 요청하신 VNQ
+            { ticker: 'XLC', name: '통신', color: '#f43f5e' },
+            { ticker: 'XLU', name: '유틸리티', color: '#84cc16' },
+        ]
+    },
+    ETF_STRATEGY: { // 3. 배당 (전략(TR) -> 배당)
+        label: "배당",
+        items: [
+            { ticker: 'SCHD', name: '배당성장', color: '#f59e0b' },
+            { ticker: 'JEPQ', name: '나스닥배당', color: '#0ea5e9' },
+            { ticker: 'SCHG', name: '대형성장', color: '#3b82f6' },
+            { ticker: 'JEPI', name: 'S&P배당', color: '#10b981' },
+        ]
+    },
+    K_PICK: { // 4. 레버리지 (지수 레버리지 -> 레버리지)
+        label: "레버리지",
+        items: [
+            { ticker: 'TQQQ', name: '나스닥 3x (TQQQ)', color: '#8b5cf6' },
+            { ticker: 'QLD', name: '나스닥 2x (QLD)', color: '#d946ef' },
+            { ticker: 'UPRO', name: 'S&P 3x (UPRO)', color: '#f59e0b' },
+            { ticker: 'SSO', name: 'S&P 2x (SSO)', color: '#22c55e' },
+            { ticker: 'SOXL', name: '반도체 3x (SOXL)', color: '#ef4444' },
+        ]
+    },
+    FACTOR: { // 5. 기타 (팩터 -> 기타)
+        label: "기타",
+        items: [
+            { ticker: 'SMH', name: '반도체', color: '#3b82f6' },
+            { ticker: 'MTUM', name: '모멘텀', color: '#a855f7' },
+            { ticker: 'USMV', name: '저변동성', color: '#10b981' },
+            { ticker: 'IWM', name: '중소형', color: '#f43f5e' },
+        ]
+    }
+};
+
+const fetchYahoo = async (symbol) => {
+    const range = '20y';
+    const interval = '1d';
+    const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?range=${range}&interval=${interval}&events=history`;
+    const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(yahooUrl)}`;
+    try {
+        const response = await fetch(proxyUrl);
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        const data = await response.json();
+        if (!data.chart || !data.chart.result || data.chart.result.length === 0) throw new Error("Invalid Data");
+        const result = data.chart.result[0];
+        const timestamps = result.timestamp;
+        const indicators = result.indicators;
+        const adjClose = indicators.adjclose ? indicators.adjclose[0].adjclose : indicators.quote[0].close;
+
+        const cleanData = {};
+        if (!timestamps) return {};
+
+        timestamps.forEach((ts, index) => {
+            if (!ts || !adjClose[index]) return;
+            const date = new Date(ts * 1000).toISOString().split('T')[0];
+            cleanData[date] = adjClose[index];
+        });
+        return cleanData;
+    } catch (error) {
+        console.error(`Fetch failed for ${symbol}`);
+        throw error;
+    }
+};
+
+const App = () => {
+    const [timeframe, setTimeframe] = useState(180);
+    const [benchmark, setBenchmark] = useState('QQQ');
+    const [calcMode, setCalcMode] = useState('RS');
+    const [currentGroup, setCurrentGroup] = useState('MACRO_RISK'); // [변경됨] 기본 시작 탭을 '매크로'로 변경
+    const [rawData, setRawData] = useState([]);
+    const [fullTimeSeries, setFullTimeSeries] = useState(null);
+    const [visibleItems, setVisibleItems] = useState({
+        K_PICK: new Set(['TQQQ', 'QLD', 'SOXL']),
+        ETF_STRATEGY: new Set(['SCHD', 'JEPQ', 'SCHG']),
+        SECTORS: new Set(['XLK', 'XLF', 'XLE', 'XLV']),
+        MACRO_RISK: new Set(['GLD', 'SLV', 'TLT']),
+        FACTOR: new Set(['SMH', 'USMV'])
+    });
+    const [isGenerating, setIsGenerating] = useState(false);
+    const [loadingProgress, setLoadingProgress] = useState('');
+    const [apiError, setApiError] = useState('');
+
+    useEffect(() => {
+        if (fullTimeSeries) processFetchedData(fullTimeSeries);
+    }, [timeframe, benchmark, fullTimeSeries, currentGroup]);
+
+    const handleRealDataFetch = async () => {
+        setIsGenerating(true);
+        setApiError('');
+        setLoadingProgress('데이터를 불러오는 중입니다...');
+
+        let allTickers = ['QQQ', 'SPY'];
+        Object.values(ASSET_GROUPS).forEach(group => {
+            allTickers = [...allTickers, ...group.items.map(i => i.ticker)];
+        });
+
+        const fetchedResults = {};
+        let successCount = 0;
+
+        try {
+            const promises = allTickers.map(async (symbol) => {
+                try {
+                    const data = await fetchYahoo(symbol);
+                    return { symbol, data };
+                } catch (err) { return { symbol, data: null }; }
+            });
+
+            const results = await Promise.all(promises);
+            results.forEach(res => {
+                if (res.data) {
+                    fetchedResults[res.symbol] = res.data;
+                    successCount++;
+                }
+            });
+
+            if (!fetchedResults['QQQ'] && !fetchedResults['SPY']) throw new Error("기준 데이터 로드 실패");
+
+            setFullTimeSeries(fetchedResults);
+            processFetchedData(fetchedResults);
+            setLoadingProgress('');
+
+        } catch (e) {
+            setApiError(e.message);
+        } finally {
+            setIsGenerating(false);
+        }
+    };
+
+    const processFetchedData = (results) => {
+        if (!results || !results[benchmark]) return;
+        const allDates = new Set();
+        Object.values(results).forEach(symbolData => {
+            Object.keys(symbolData).forEach(date => allDates.add(date));
+        });
+        const sortedDates = Array.from(allDates).sort();
+        const sliceIndex = timeframe > sortedDates.length ? 0 : sortedDates.length - timeframe;
+        const recentDates = sortedDates.slice(sliceIndex);
+
+        const currentGroupItems = ASSET_GROUPS[currentGroup].items;
+
+        const formattedData = recentDates.map(date => {
+            const point = { date };
+            if (!results[benchmark][date]) return null;
+            point['BENCHMARK'] = results[benchmark][date];
+            currentGroupItems.forEach(item => {
+                if (results[item.ticker] && results[item.ticker][date]) {
+                    point[item.ticker] = results[item.ticker][date];
+                }
+            });
+            return point;
+        }).filter(p => p !== null);
+
+        setRawData(formattedData);
+    };
+
+    const toggleItem = (ticker) => {
+        const currentSet = new Set(visibleItems[currentGroup]);
+        if (currentSet.has(ticker)) currentSet.delete(ticker);
+        else currentSet.add(ticker);
+        setVisibleItems({ ...visibleItems, [currentGroup]: currentSet });
+    };
+
+    const mddData = useMemo(() => {
+        if (rawData.length === 0) return {};
+        const mddResults = {};
+        const currentGroupItems = ASSET_GROUPS[currentGroup].items;
+
+        currentGroupItems.forEach(item => {
+            let maxPrice = -Infinity;
+            let maxDrawdown = 0;
+            
+            rawData.forEach(day => {
+                const price = day[item.ticker];
+                if (price != null) {
+                    if (price > maxPrice) maxPrice = price;
+                    const drawdown = (price - maxPrice) / maxPrice;
+                    if (drawdown < maxDrawdown) maxDrawdown = drawdown;
+                }
+            });
+            mddResults[item.ticker] = (maxDrawdown * 100).toFixed(2);
+        });
+        return mddResults;
+    }, [rawData, currentGroup]);
+
+
+    const chartData = useMemo(() => {
+        if (rawData.length === 0) return [];
+
+        const assetBases = {};
+        const currentGroupItems = ASSET_GROUPS[currentGroup].items;
+
+        currentGroupItems.forEach(item => {
+            const firstValidPoint = rawData.find(d => d[item.ticker] != null && d.BENCHMARK != null);
+            if (firstValidPoint) {
+                assetBases[item.ticker] = {
+                    assetStartPrice: firstValidPoint[item.ticker],
+                    benchStartPrice: firstValidPoint.BENCHMARK
+                };
+            }
+        });
+
+        return rawData.map(day => {
+            const point = { date: day.date };
+
+            currentGroupItems.forEach(item => {
+                if (visibleItems[currentGroup].has(item.ticker)) {
+                    const base = assetBases[item.ticker];
+
+                    if (!base || day[item.ticker] == null || day.BENCHMARK == null) {
+                        point[item.ticker] = null;
+                    } else {
+                        const assetReturn = day[item.ticker] / base.assetStartPrice;
+                        
+                        let finalValue;
+                        if (calcMode === 'RS') {
+                            const benchReturn = day.BENCHMARK / base.benchStartPrice;
+                            finalValue = ((assetReturn / benchReturn) - 1) * 100;
+                        } else {
+                            finalValue = (assetReturn - 1) * 100;
+                        }
+                        
+                        point[item.ticker] = parseFloat(finalValue.toFixed(2));
+                    }
+                }
+            });
+            return point;
+        }).filter(p => p.date);
+    }, [rawData, visibleItems, benchmark, currentGroup, calcMode]);
+
+    const getStartDate = (ticker) => {
+        if (!fullTimeSeries || !fullTimeSeries[ticker]) return "N/A";
+        const dates = Object.keys(fullTimeSeries[ticker]).sort();
+        return dates[0] || "N/A";
+    };
+
+    const TimeBtn = ({ label, days }) => (
+        <button
+            onClick={() => setTimeframe(days)}
+            className={`px-3 py-2 text-sm font-semibold rounded-lg transition-colors whitespace-nowrap ${
+                timeframe === days 
+                ? 'bg-blue-500 text-white shadow-md' 
+                : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+            }`}
+        >
+            {label}
+        </button>
+    );
+
+    useEffect(() => { handleRealDataFetch(); }, []);
+
+    return (
+        <div className="min-h-screen p-4 md:p-8">
+            <div className="max-w-6xl mx-auto space-y-6">
+                {/* Header */}
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4">
+                    <div>
+                        <h1 className="text-3xl font-bold text-slate-900 flex items-center gap-2">
+                            Investment Dashboard
+                        </h1>
+                        <p className="text-slate-500 font-medium mt-1">
+                            {calcMode === 'RS' ? '상대강도(RS) 분석' : '단순 수익률(%) 분석'}
+                        </p>
+                    </div>
+                    <button 
+                        onClick={handleRealDataFetch} 
+                        disabled={isGenerating} 
+                        className="flex items-center gap-2 px-5 py-3 bg-blue-500 hover:bg-blue-600 active:bg-blue-700 text-white rounded-xl font-bold transition-colors shadow-sm disabled:opacity-50"
+                    >
+                        <Icon name="RefreshCw" className={isGenerating ? "animate-spin" : ""} size={18} /> 
+                        {isGenerating ? '갱신 중...' : '데이터 갱신'}
+                    </button>
+                </div>
+
+                {/* Top Controls */}
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+                    {/* Asset Tabs */}
+                    <div className="md:col-span-12 toss-card p-2 flex overflow-x-auto no-scrollbar gap-1">
+                        {Object.keys(ASSET_GROUPS).map(key => (
+                            <button
+                                key={key}
+                                onClick={() => setCurrentGroup(key)}
+                                className={`flex-1 min-w-[100px] py-3 rounded-xl font-bold text-sm transition-all whitespace-nowrap ${
+                                    currentGroup === key 
+                                    ? 'bg-slate-900 text-white shadow-md' 
+                                    : 'text-slate-500 hover:bg-slate-50'
+                                }`}
+                            >
+                                <div className="flex items-center justify-center gap-1">
+                                    {key === 'K_PICK' && <Icon name="Flame" size={14} className={currentGroup === key ? "text-orange-400" : "text-slate-400"} />}
+                                    {ASSET_GROUPS[key].label}
+                                </div>
+                            </button>
+                        ))}
+                    </div>
+
+                    {/* Controls Row: Mode & Benchmark */}
+                    <div className="md:col-span-4 flex flex-col gap-4">
+                         {/* Analysis Mode Toggle */}
+                         <div className="toss-card p-4 flex flex-col gap-2">
+                            <span className="text-xs font-bold text-slate-400 uppercase">Analysis Mode</span>
+                            <div className="flex gap-2 bg-gray-100 p-1 rounded-xl">
+                                <button 
+                                    onClick={() => setCalcMode('RS')} 
+                                    className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${calcMode === 'RS' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400'}`}
+                                >
+                                    RS (상대강도)
+                                </button>
+                                <button 
+                                    onClick={() => setCalcMode('SIMPLE')} 
+                                    className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${calcMode === 'SIMPLE' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400'}`}
+                                >
+                                    Simple (%)
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Benchmark Selection */}
+                        <div className="toss-card p-4 flex flex-col gap-2">
+                            <span className="text-xs font-bold text-slate-400 uppercase">Benchmark</span>
+                            <div className="flex gap-2 bg-gray-100 p-1 rounded-xl">
+                                <button 
+                                    onClick={() => setBenchmark('QQQ')} 
+                                    className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${benchmark === 'QQQ' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400'}`}
+                                >
+                                    QQQ
+                                </button>
+                                <button 
+                                    onClick={() => setBenchmark('SPY')} 
+                                    className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${benchmark === 'SPY' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400'}`}
+                                >
+                                    SPY
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Timeframe */}
+                    <div className="md:col-span-8 toss-card p-5 flex flex-col gap-3">
+                        <span className="text-xs font-bold text-slate-400 uppercase">Period</span>
+                        <div className="grid grid-cols-3 md:grid-cols-5 gap-2">
+                            <TimeBtn label="1개월" days={30} />
+                            <TimeBtn label="3개월" days={90} />
+                            <TimeBtn label="6개월" days={180} />
+                            <TimeBtn label="1년" days={365} />
+                            <TimeBtn label="2년" days={730} />
+                            <TimeBtn label="5년" days={1825} />
+                            <TimeBtn label="10년" days={3650} />
+                            <TimeBtn label="15년" days={5475} />
+                            <TimeBtn label="20년" days={7300} />
+                        </div>
+                    </div>
+                </div>
+
+                {/* Chart Area */}
+                <div className="toss-card p-6 h-[500px] relative">
+                    {(isGenerating || loadingProgress) && (
+                        <div className="absolute top-6 right-6 z-10 bg-slate-900 text-white px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-2 shadow-lg animate-pulse">
+                            {loadingProgress || '로딩 중...'}
+                        </div>
+                    )}
+                    <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                            <XAxis 
+                                dataKey="date" 
+                                stroke="#94a3b8" 
+                                tick={{fill: '#64748b', fontSize: 12}} 
+                                tickFormatter={(str) => str ? str.substring(2) : ''} 
+                                minTickGap={40}
+                                axisLine={false}
+                                tickLine={false}
+                                dy={10}
+                            />
+                            <YAxis 
+                                stroke="#94a3b8" 
+                                tick={{fill: '#64748b', fontSize: 12}} 
+                                unit="%" 
+                                domain={['auto', 'auto']}
+                                axisLine={false}
+                                tickLine={false}
+                                dx={-10}
+                            />
+                            <Tooltip 
+                                contentStyle={{ backgroundColor: '#ffffff', borderRadius: '16px', boxShadow: '0 4px 20px rgba(0,0,0,0.1)', border: 'none', color: '#191f28' }} 
+                                itemStyle={{ fontSize: '13px', fontWeight: '500', padding: '2px 0' }} 
+                                labelStyle={{ color: '#8b95a1', marginBottom: '8px', fontSize: '12px' }}
+                                formatter={(value) => [`${value}%`, calcMode === 'RS' ? 'RS' : 'Return']} 
+                            />
+                            <Legend wrapperStyle={{ paddingTop: '20px' }} iconType="circle" />
+                            <ReferenceLine y={0} stroke="#cbd5e1" strokeDasharray="3 3" strokeWidth={2} label={{ position: 'right', value: '기준점', fill: '#94a3b8', fontSize: 11 }} />
+                            {ASSET_GROUPS[currentGroup].items.map(item => (
+                                visibleItems[currentGroup].has(item.ticker) && (
+                                    <Line 
+                                        key={item.ticker} 
+                                        type="monotone" 
+                                        dataKey={item.ticker} 
+                                        name={item.name} 
+                                        stroke={item.color} 
+                                        strokeWidth={3} 
+                                        dot={false} 
+                                        activeDot={{ r: 6, strokeWidth: 2, stroke: '#fff' }} 
+                                        connectNulls 
+                                    />
+                                )
+                            ))}
+                        </LineChart>
+                    </ResponsiveContainer>
+                </div>
+
+                {/* Filters & Info */}
+                <div className="space-y-3">
+                    <div className="flex items-center gap-2 px-1">
+                        <Icon name="Filter" className="text-slate-400" size={16}/>
+                        <h3 className="text-sm font-bold text-slate-500 uppercase">Assets to Display</h3>
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                        {ASSET_GROUPS[currentGroup].items.map(item => {
+                            const isActive = visibleItems[currentGroup].has(item.ticker);
+                            const startDate = getStartDate(item.ticker);
+                            const mdd = mddData[item.ticker] || "0.00";
+
+                            return (
+                                <div 
+                                    key={item.ticker}
+                                    className={`
+                                        flex flex-col rounded-2xl p-3 transition-all duration-200 border
+                                        ${isActive 
+                                            ? 'bg-white border-transparent ring-2 ring-inset shadow-sm' 
+                                            : 'bg-transparent border-slate-200 hover:bg-white hover:border-transparent hover:shadow-sm'
+                                        }
+                                    `}
+                                    style={isActive ? { ringColor: item.color } : {}}
+                                >
+                                    {/* Toggle Click Area */}
+                                    <div 
+                                        onClick={() => toggleItem(item.ticker)}
+                                        className="cursor-pointer mb-2"
+                                    >
+                                        <div className="flex items-center justify-between mb-1">
+                                            <div className="flex items-center gap-2">
+                                                <div className={`w-2 h-2 rounded-full ${isActive ? '' : 'bg-slate-300'}`} style={isActive ? { backgroundColor: item.color } : {}}></div>
+                                                <span className={`text-sm font-bold ${isActive ? 'text-slate-800' : 'text-slate-400'}`}>{item.ticker}</span>
+                                            </div>
+                                        </div>
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-xs text-slate-500">{item.name}</span>
+                                        </div>
+                                        
+                                        {/* MDD Display */}
+                                        <div className="mt-2 flex items-center justify-between">
+                                            <span className="text-[10px] text-slate-400">MDD</span>
+                                            <span className="text-xs font-bold text-red-500">{mdd}%</span>
+                                        </div>
+                                        
+                                        <span className="text-[10px] text-slate-300 mt-1 block">Since {startDate}</span>
+                                    </div>
+
+                                    {/* Link Button */}
+                                    <a 
+                                        href={`https://seekingalpha.com/symbol/${item.ticker}`} 
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        onClick={(e) => e.stopPropagation()} 
+                                        className="mt-auto py-1.5 px-2 bg-slate-50 hover:bg-slate-100 text-slate-500 hover:text-blue-600 rounded-lg text-[11px] font-semibold text-center flex items-center justify-center gap-1 transition-colors"
+                                    >
+                                        <Icon name="ExternalLink" size={10} />
+                                        종목정보
+                                    </a>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App />);
+</script>
+</body>
+</html>
