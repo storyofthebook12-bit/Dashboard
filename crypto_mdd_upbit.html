@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>암호화폐 정밀 분석 (5Y/10Y Added)</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --toss-blue: #3182f6;
+            --toss-red: #f04452;
+            --toss-background: #f2f4f6;
+            --toss-card-bg: #ffffff;
+            --toss-text-primary: #191f28;
+            --toss-text-secondary: #8b95a1;
+            --toss-grey: #e5e8eb;
+            --toss-input-bg: #f9fafb;
+            --theme-color: #3182f6;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Pretendard", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: var(--toss-background);
+            color: var(--toss-text-primary);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .container { width: 100%; max-width: 1000px; }
+        
+        .header-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        h1 { font-size: 24px; font-weight: 700; margin: 0; }
+
+        .currency-toggle {
+            background-color: #e5e8eb;
+            border-radius: 20px;
+            padding: 4px;
+            display: flex;
+            gap: 4px;
+        }
+        .currency-btn {
+            border: none;
+            background: none;
+            padding: 6px 16px;
+            border-radius: 16px;
+            font-size: 13px;
+            font-weight: 700;
+            color: #8b95a1;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .currency-btn.active {
+            background-color: #ffffff;
+            color: #191f28;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        .top10-grid { display: grid; gap: 8px; margin-bottom: 20px; width: 100%; }
+        .chip {
+            background-color: var(--toss-card-bg);
+            border: 1px solid var(--toss-grey);
+            border-radius: 16px;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--toss-text-secondary);
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex; align-items: center; justify-content: center; padding: 10px 0;
+        }
+        .chip:hover { background-color: #f9f9f9; }
+        .chip.active {
+            background-color: var(--theme-color);
+            color: white;
+            border-color: var(--theme-color);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+        }
+
+        @media (min-width: 768px) { .top10-grid { grid-template-columns: repeat(10, 1fr); } }
+        @media (max-width: 767px) { 
+            .top10-grid { grid-template-columns: repeat(5, 1fr); }
+            .chip { font-size: 11px; border-radius: 12px; }
+        }
+
+        .scroll-container {
+            display: flex; overflow-x: auto; gap: 8px; margin-bottom: 15px; padding-bottom: 5px;
+            -ms-overflow-style: none; scrollbar-width: none;
+        }
+        .scroll-container::-webkit-scrollbar { display: none; }
+        
+        .period-chip { padding: 8px 16px; border-radius: 20px; white-space: nowrap; }
+        .period-chip.active { 
+            background-color: var(--theme-color);
+            border-color: var(--theme-color); 
+            color: white; 
+        }
+
+        select {
+            width: 100%; background-color: var(--toss-card-bg); border: none; padding: 12px 16px;
+            border-radius: 12px; font-size: 16px; font-weight: 600; color: var(--toss-text-primary);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 15px; outline: none;
+        }
+
+        .date-range-box {
+            background-color: var(--toss-card-bg); padding: 16px; border-radius: 20px; margin-bottom: 20px;
+            display: none; animation: fadeIn 0.3s ease;
+        }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+
+        .date-inputs { display: flex; gap: 10px; margin-bottom: 10px; }
+        input[type="date"] {
+            flex: 1; padding: 10px; border: 1px solid var(--toss-grey); border-radius: 12px;
+            background-color: var(--toss-input-bg); font-family: inherit; font-size: 14px;
+        }
+        .apply-btn {
+            width: 100%; background-color: var(--theme-color); color: white; border: none;
+            padding: 12px; border-radius: 12px; font-weight: 700; cursor: pointer;
+        }
+
+        .card {
+            background-color: var(--toss-card-bg); border-radius: 24px; padding: 24px;
+            margin-bottom: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.03);
+        }
+        .card-row { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 8px; }
+        .card-title { font-size: 15px; color: var(--toss-text-secondary); font-weight: 600; }
+        .card-value { font-size: 24px; font-weight: 700; color: var(--toss-text-primary); }
+        .card-sub { font-size: 13px; font-weight: 500; color: var(--toss-text-secondary); }
+        
+        .chart-container { position: relative; height: 350px; width: 100%; }
+        
+        /* 색상 유틸리티 */
+        .text-blue { color: var(--toss-blue) !important; }
+        .text-red { color: var(--toss-red) !important; }
+        
+        /* 바 그래프 스타일 */
+        .bar-bg { height: 6px; background-color: var(--toss-grey); border-radius: 3px; margin-top: 10px; overflow: hidden; display: flex; }
+        .bar-fill { height: 100%; transition: width 0.5s ease-out; }
+        .bar-fill.blue { background-color: var(--toss-blue) !important; }
+        .bar-fill.red { background-color: var(--toss-red) !important; }
+
+        .hl-container {
+            display: flex; background-color: var(--toss-input-bg); border-radius: 16px; padding: 16px;
+            margin-top: 20px; justify-content: space-between; align-items: center;
+        }
+        .hl-item { display: flex; flex-direction: column; width: 48%; }
+        .hl-label { font-size: 12px; color: var(--toss-text-secondary); margin-bottom: 4px; font-weight: 600; }
+        .hl-value { font-size: 16px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .hl-divider { width: 1px; height: 30px; background-color: var(--toss-grey); }
+
+        #source-info { text-align: center; color: #aaa; font-size: 12px; margin-top: 20px; padding-bottom: 20px; }
+        #sort-status { font-size: 12px; color: #3182f6; text-align: right; margin-bottom: 5px; font-weight: 600; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="header-row">
+        <h1>암호화폐 정밀 분석</h1>
+        <div class="currency-toggle">
+            <button class="currency-btn active" onclick="setCurrency('krw', this)">KRW</button>
+            <button class="currency-btn" onclick="setCurrency('usd', this)">USD</button>
+        </div>
+    </div>
+    
+    <div id="sort-status"></div>
+
+    <div id="top10-grid" class="top10-grid">
+        <div class="chip">loading..</div>
+    </div>
+
+    <select id="coin-select">
+        <option>목록 로딩중...</option>
+    </select>
+
+    <div class="scroll-container">
+        <button class="chip period-chip" onclick="setPresetPeriod('7', this)">1주</button>
+        <button class="chip period-chip active" onclick="setPresetPeriod('30', this)">1개월</button>
+        <button class="chip period-chip" onclick="setPresetPeriod('90', this)">3개월</button>
+        <button class="chip period-chip" onclick="setPresetPeriod('180', this)">6개월</button>
+        <button class="chip period-chip" onclick="setPresetPeriod('365', this)">1년</button>
+        <button class="chip period-chip" onclick="setPresetPeriod('730', this)">2년</button>
+        <button class="chip period-chip" onclick="setPresetPeriod('1095', this)">3년</button>
+        <button class="chip period-chip" onclick="setPresetPeriod('1825', this)">5년</button>
+        <button class="chip period-chip" onclick="setPresetPeriod('3650', this)">10년</button>
+        <button class="chip period-chip" onclick="toggleCustomDate(this)" id="custom-date-btn">기간 설정</button>
+    </div>
+
+    <div class="date-range-box" id="date-range-box">
+        <div class="date-inputs">
+            <input type="date" id="start-date">
+            <input type="date" id="end-date">
+        </div>
+        <button class="apply-btn" onclick="applyCustomRange()">조회하기</button>
+    </div>
+
+    <div class="card">
+        <div class="card-title" style="margin-bottom:5px;">현재 시세</div>
+        <div class="card-value" id="current-price">-</div>
+        <div class="card-sub" id="change-display">-</div>
+
+        <div class="hl-container">
+            <div class="hl-item">
+                <span class="hl-label text-red">기간 최고 (High)</span>
+                <span class="hl-value" id="period-high">-</span>
+            </div>
+            <div class="hl-divider"></div>
+            <div class="hl-item" style="text-align: right;">
+                <span class="hl-label text-blue">기간 최저 (Low)</span>
+                <span class="hl-value" id="period-low">-</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-title" style="margin-bottom:15px;">가격 흐름</div>
+        <div class="chart-container">
+            <canvas id="priceChart"></canvas>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-row">
+            <div>
+                <div class="card-title">최대 낙폭 (MDD)</div>
+                <div class="card-value text-blue" id="mdd-value">0.00%</div>
+                <div class="card-sub">고점 대비 하락률</div>
+            </div>
+            <div style="text-align: right;">
+                <div class="card-title">최대 상승 (MDU)</div>
+                <div class="card-value text-red" id="mdu-value">0.00%</div>
+                <div class="card-sub">저점 대비 상승률</div>
+            </div>
+        </div>
+        <div style="margin-top: 20px;">
+            <div style="display:flex; justify-content:space-between; font-size:12px; color:#8b95a1; margin-bottom:5px;">
+                <span>Risk (MDD)</span>
+                <span>Potential (MDU)</span>
+            </div>
+            <div class="bar-bg">
+                <div id="mdd-bar" class="bar-fill blue" style="width: 0%;"></div>
+                <div style="flex:1; background-color:transparent;"></div>
+                <div id="mdu-bar" class="bar-fill red" style="width: 0%;"></div>
+            </div>
+        </div>
+    </div>
+    
+    <div id="source-info">
+        데이터: Upbit API (Price) / CoinGecko (Rank)
+    </div>
+</div>
+
+<script>
+    let currentMarket = 'KRW-BTC'; 
+    let currentSymbol = 'BTC';
+    let currentCurrency = 'krw'; 
+    let currentThemeColor = '#F7931A';
+    let chartInstance = null;
+    let fetchMode = 'preset'; 
+    let presetDays = '30';
+    let customStartDate = null;
+    let customEndDate = null;
+    let usdtRate = 1400; 
+
+    const top10Grid = document.getElementById('top10-grid');
+    const coinSelect = document.getElementById('coin-select');
+    const dateRangeBox = document.getElementById('date-range-box');
+    const currentPriceEl = document.getElementById('current-price');
+    const changeDisplayEl = document.getElementById('change-display');
+    const mddValueEl = document.getElementById('mdd-value');
+    const mduValueEl = document.getElementById('mdu-value');
+    const mddBar = document.getElementById('mdd-bar');
+    const mduBar = document.getElementById('mdu-bar');
+    const highPriceEl = document.getElementById('period-high');
+    const lowPriceEl = document.getElementById('period-low');
+    const sortStatusEl = document.getElementById('sort-status');
+
+    // 브랜드 컬러 & 고채도 팔레트
+    const brandColors = {
+        'BTC': '#F7931A', 'ETH': '#627EEA', 'XRP': '#00AEEF',
+        'SOL': '#9945FF', 'DOGE': '#C2A633', 'ADA': '#0033AD',
+        'TRX': '#FF0013', 'AVAX': '#E84142', 'DOT': '#E6007A',
+        'SHIB': '#FFA409', 'LINK': '#2A5ADA', 'ETC': '#328332',
+        'BCH': '#8DC351', 'MATIC': '#8247E5', 'EOS': '#000000',
+        'SAND': '#00ADEF', 'MANA': '#FF2D55'
+    };
+    const vibrantPalette = ['#FF0055', '#00FF88', '#4D4DFF', '#FF9900', '#AA00FF', '#00CCFF', '#FF00CC', '#FFEE00'];
+
+    const getCoinColor = (symbol) => {
+        if (brandColors[symbol]) return brandColors[symbol];
+        let hash = 0;
+        for (let i = 0; i < symbol.length; i++) { hash = symbol.charCodeAt(i) + ((hash << 5) - hash); }
+        return vibrantPalette[Math.abs(hash) % vibrantPalette.length];
+    };
+
+    const applyTheme = (color) => {
+        currentThemeColor = color;
+        document.documentElement.style.setProperty('--theme-color', color);
+    };
+
+    async function fetchUsdRate() {
+        try {
+            const res = await fetch('https://api.upbit.com/v1/ticker?markets=KRW-USDT');
+            const data = await res.json();
+            usdtRate = data[0].trade_price;
+        } catch(e) { console.log('환율 기본값 사용'); }
+    }
+
+    window.setCurrency = (currency, btn) => {
+        currentCurrency = currency;
+        document.querySelectorAll('.currency-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        loadData(); 
+    };
+
+    const formatPrice = (price) => {
+        let finalPrice = price;
+        let currencyCode = 'KRW';
+        if (currentCurrency === 'usd') {
+            finalPrice = price / usdtRate;
+            currencyCode = 'USD';
+        }
+        const options = { style: 'currency', currency: currencyCode, maximumFractionDigits: 2 };
+        if (currentCurrency === 'krw') {
+            options.maximumFractionDigits = finalPrice < 100 ? 2 : 0;
+            return new Intl.NumberFormat('ko-KR', options).format(finalPrice);
+        } else {
+            options.maximumFractionDigits = finalPrice < 1 ? 4 : 2;
+            return new Intl.NumberFormat('en-US', options).format(finalPrice);
+        }
+    };
+
+    // 하이브리드 리스트 로직
+    async function fetchCoinList() {
+        try {
+            await fetchUsdRate();
+
+            // 1. 업비트 전체 마켓
+            const upbitRes = await fetch('https://api.upbit.com/v1/market/all?isDetails=false');
+            const upbitAll = await upbitRes.json();
+            
+            const krwMarkets = upbitAll.filter(m => m.market.startsWith('KRW-'));
+            const upbitMap = {}; 
+            krwMarkets.forEach(m => {
+                const sym = m.market.replace('KRW-', '');
+                upbitMap[sym] = { market: m.market, name: m.korean_name };
+            });
+
+            // 2. CoinGecko Top 100 (시총 순)
+            let sortedList = [];
+            try {
+                const cgRes = await fetch('https://api.coingecko.com/api/v3/coins/markets?vs_currency=krw&order=market_cap_desc&per_page=100&page=1&sparkline=false');
+                if(!cgRes.ok) throw new Error("CG Rate Limit");
+                const cgList = await cgRes.json();
+                
+                cgList.forEach(cg => {
+                    const sym = cg.symbol.toUpperCase();
+                    if(upbitMap[sym]) {
+                        sortedList.push({
+                            market: upbitMap[sym].market,
+                            symbol: sym,
+                            korean_name: upbitMap[sym].name
+                        });
+                    }
+                });
+                sortStatusEl.innerText = "✨ 시가총액 순 정렬 (CoinGecko)";
+
+            } catch (cgError) {
+                console.warn("CoinGecko 차단됨, 업비트 거래량 순으로 대체");
+                const marketsStr = krwMarkets.map(m => m.market).join(',');
+                const tickerRes = await fetch(`https://api.upbit.com/v1/ticker?markets=${marketsStr}`);
+                const tickers = await tickerRes.json();
+                tickers.sort((a, b) => b.acc_trade_price_24h - a.acc_trade_price_24h);
+                
+                sortedList = tickers.map(t => {
+                    const info = krwMarkets.find(m => m.market === t.market);
+                    return {
+                        market: t.market,
+                        symbol: info.market.replace('KRW-', ''),
+                        korean_name: info.korean_name
+                    };
+                });
+                sortStatusEl.innerText = "⚠️ 시총 정보 조회 실패 (거래대금 순 정렬)";
+            }
+
+            if(sortedList.length > 100) sortedList = sortedList.slice(0, 100);
+
+            renderCoinList(sortedList);
+            handleCoinChange(sortedList[0].market, sortedList[0].symbol); 
+
+        } catch (e) {
+            console.error(e);
+            alert("초기화 실패. 인터넷 연결을 확인하세요.");
+        }
+    }
+
+    function renderCoinList(list) {
+        coinSelect.innerHTML = '';
+        list.forEach((coin, idx) => {
+            const opt = document.createElement('option');
+            opt.value = coin.market;
+            opt.dataset.symbol = coin.symbol;
+            opt.text = `${idx+1}. ${coin.korean_name} (${coin.symbol})`;
+            coinSelect.appendChild(opt);
+        });
+
+        top10Grid.innerHTML = '';
+        list.slice(0, 10).forEach((coin, idx) => {
+            const chip = document.createElement('div');
+            chip.className = `chip ${idx === 0 ? 'active' : ''}`;
+            chip.innerText = coin.symbol;
+            chip.dataset.market = coin.market;
+            chip.onclick = () => handleCoinChange(coin.market, coin.symbol);
+            top10Grid.appendChild(chip);
+        });
+    }
+
+    coinSelect.addEventListener('change', (e) => {
+        const selectedOpt = e.target.options[e.target.selectedIndex];
+        handleCoinChange(e.target.value, selectedOpt.dataset.symbol);
+    });
+
+    const handleCoinChange = (market, symbol) => {
+        currentMarket = market;
+        currentSymbol = symbol;
+        
+        coinSelect.value = market;
+        document.querySelectorAll('.top10-grid .chip').forEach(c => c.classList.remove('active'));
+        const targetChip = document.querySelector(`.chip[data-market="${market}"]`);
+        if (targetChip) targetChip.classList.add('active');
+
+        applyTheme(getCoinColor(symbol));
+        loadData();
+    }
+
+    window.setPresetPeriod = (days, btn) => {
+        fetchMode = 'preset';
+        presetDays = parseInt(days);
+        document.querySelectorAll('.period-chip').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        dateRangeBox.style.display = 'none';
+        loadData();
+    };
+
+    window.toggleCustomDate = (btn) => {
+        const isHidden = dateRangeBox.style.display === 'none';
+        if (isHidden) {
+            dateRangeBox.style.display = 'block';
+            document.querySelectorAll('.period-chip').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            const today = new Date().toISOString().split('T')[0];
+            if(!document.getElementById('start-date').value) document.getElementById('end-date').value = today;
+        } else {
+            dateRangeBox.style.display = 'none';
+        }
+    };
+
+    window.applyCustomRange = () => {
+        const startVal = document.getElementById('start-date').value;
+        const endVal = document.getElementById('end-date').value;
+        if (!startVal || !endVal) { alert("날짜를 선택하세요."); return; }
+        customStartDate = new Date(startVal);
+        customEndDate = new Date(endVal);
+        fetchMode = 'custom';
+        loadData();
+    };
+
+    async function loadData() {
+        document.querySelector('.chart-container').style.opacity = '0.5';
+        try {
+            let unit = 'days'; 
+            let fetchCount = 30; // API에 요청할 갯수
+            let targetCount = 30; // 실제 필요한 일수
+            let toDate = ''; 
+
+            if (fetchMode === 'preset') {
+                targetCount = presetDays;
+            } else {
+                const diffTime = Math.abs(customEndDate - customStartDate);
+                targetCount = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+            }
+
+            // 정확한 캔들 갯수 및 단위 계산 (5년, 10년 포함)
+            fetchCount = targetCount; 
+            if (targetCount > 200) {
+                unit = 'weeks';
+                fetchCount = Math.ceil(targetCount / 7); 
+            }
+            if (targetCount > 730) { // 2년 이상 월봉
+                unit = 'months';
+                fetchCount = Math.ceil(targetCount / 30);
+            }
+
+            // 업비트 최대 200개 제한
+            if (fetchCount > 200) fetchCount = 200;
+
+            if (fetchMode === 'custom') {
+                const d = new Date(customEndDate);
+                d.setDate(d.getDate() + 1); 
+                toDate = `&to=${d.toISOString()}`;
+            }
+
+            const url = `https://api.upbit.com/v1/candles/${unit}?market=${currentMarket}&count=${fetchCount}${toDate}`;
+            const res = await fetch(url);
+            if (!res.ok) throw new Error("Upbit API Error");
+            
+            let data = await res.json();
+            data.reverse();
+
+            // 정확한 날짜 필터링
+            let cutOffDate;
+            if (fetchMode === 'preset') {
+                cutOffDate = new Date();
+                cutOffDate.setDate(cutOffDate.getDate() - presetDays);
+            } else {
+                cutOffDate = customStartDate;
+            }
+            data = data.filter(c => new Date(c.candle_date_time_kst) >= cutOffDate);
+
+            if (data.length === 0) { alert("데이터 없음"); return; }
+
+            calculateStats(data);
+            renderChart(data);
+
+        } catch (e) {
+            console.error(e);
+        } finally {
+            document.querySelector('.chart-container').style.opacity = '1';
+        }
+    }
+
+    function calculateStats(candles) {
+        let peak = -Infinity;
+        let maxDrawdown = 0;
+        let trough = Infinity;
+        let maxDrawup = 0;
+
+        let runningPeak = -Infinity;
+        let runningTrough = Infinity;
+        let periodHigh = -Infinity;
+        let periodLow = Infinity;
+
+        candles.forEach(c => {
+            const price = c.trade_price;
+            
+            if (c.high_price > periodHigh) periodHigh = c.high_price;
+            if (c.low_price < periodLow) periodLow = c.low_price;
+
+            if (price > runningPeak) runningPeak = price;
+            const dd = (runningPeak - price) / runningPeak;
+            if (dd > maxDrawdown) maxDrawdown = dd;
+
+            if (price < runningTrough) runningTrough = price;
+            const du = (price - runningTrough) / runningTrough;
+            if (du > maxDrawup) maxDrawup = du;
+        });
+
+        mddValueEl.innerText = `-${(maxDrawdown * 100).toFixed(2)}%`;
+        mduValueEl.innerText = `+${(maxDrawup * 100).toFixed(2)}%`;
+        
+        mddBar.style.width = `${Math.min(maxDrawdown * 100, 100)}%`;
+        mduBar.style.width = `${Math.min(maxDrawup * 100, 100)}%`;
+
+        const startPrice = candles[0].trade_price;
+        const endPrice = candles[candles.length - 1].trade_price;
+        const changeRate = ((endPrice - startPrice) / startPrice) * 100;
+
+        currentPriceEl.innerText = formatPrice(endPrice);
+        
+        const isUp = changeRate >= 0;
+        changeDisplayEl.innerText = `${isUp ? '+' : ''}${changeRate.toFixed(2)}% (기간 변동)`;
+        changeDisplayEl.style.color = isUp ? '#f04452' : '#3182f6';
+        
+        highPriceEl.innerText = formatPrice(periodHigh);
+        lowPriceEl.innerText = formatPrice(periodLow);
+    }
+
+    function renderChart(candles) {
+        const ctx = document.getElementById('priceChart').getContext('2d');
+        const labels = candles.map(c => {
+            const d = new Date(c.candle_date_time_kst);
+            return `${d.getFullYear().toString().slice(2)}.${(d.getMonth()+1).toString().padStart(2,'0')}.${d.getDate().toString().padStart(2,'0')}`;
+        });
+        const dataPoints = candles.map(c => c.trade_price);
+
+        if (chartInstance) chartInstance.destroy();
+
+        const gradient = ctx.createLinearGradient(0, 0, 0, 300);
+        gradient.addColorStop(0, currentThemeColor); 
+        gradient.addColorStop(1, 'rgba(255, 255, 255, 0)'); 
+
+        chartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: '가격',
+                    data: dataPoints,
+                    borderColor: currentThemeColor, 
+                    backgroundColor: gradient,
+                    borderWidth: 3,
+                    pointRadius: 0,
+                    pointHoverRadius: 5,
+                    fill: false, 
+                    tension: 0.4, 
+                    borderJoinStyle: 'round',
+                    borderCapStyle: 'round'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                layout: { padding: { left: 0, right: 0, top: 20, bottom: 0 } },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { enabled: true, mode: 'index', intersect: false },
+                    startEndLabels: {} 
+                },
+                scales: {
+                    x: {
+                        display: true, grid: { display: false },
+                        ticks: { maxTicksLimit: 6, color: '#8b95a1', font: { size: 10 }, maxRotation: 0, autoSkip: true }
+                    },
+                    y: {
+                        display: true, position: 'left',
+                        grid: { display: true, color: '#e5e8eb', borderDash: [5, 5], drawBorder: false },
+                        ticks: { 
+                            display: true, color: '#aaa', font: { size: 10 },
+                            callback: function(value) {
+                                if(currentCurrency === 'usd') return '$' + value.toLocaleString();
+                                return new Intl.NumberFormat('en-US', { notation: "compact", compactDisplay: "short" }).format(value);
+                            }
+                        } 
+                    }
+                },
+                interaction: { mode: 'nearest', axis: 'x', intersect: false }
+            }
+        });
+    }
+
+    Chart.register({
+        id: 'startEndLabels',
+        afterDatasetsDraw(chart) {
+            const { ctx, data, chartArea: { top } } = chart;
+            const meta = chart.getDatasetMeta(0);
+            const dataset = data.datasets[0];
+            if (meta.data.length === 0) return;
+
+            ctx.save();
+            ctx.textBaseline = 'bottom';
+            ctx.font = 'bold 12px sans-serif';
+
+            const fIdx = 0;
+            const fX = meta.data[fIdx].x;
+            const fY = meta.data[fIdx].y;
+            const fPrice = dataset.data[fIdx];
+            ctx.textAlign = 'left';
+            let sY = fY - 8; if(sY < top + 15) sY = fY + 25; 
+            ctx.fillStyle = '#191f28'; 
+            ctx.fillText(formatPrice(fPrice), fX, sY);
+
+            const lIdx = meta.data.length - 1;
+            const lX = meta.data[lIdx].x;
+            const lY = meta.data[lIdx].y;
+            const lPrice = dataset.data[lIdx];
+            ctx.textAlign = 'right';
+            let eY = lY - 8; if(eY < top + 15) eY = lY + 25;
+            // 우측 가격 검정색 고정
+            ctx.fillStyle = '#191f28'; 
+            ctx.fillText(formatPrice(lPrice), lX, eY);
+            ctx.restore();
+        }
+    });
+
+    fetchCoinList();
+</script>
+
+<div style="position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 9999;">
+    <a href="index.html" style="background-color: #333; color: white; padding: 12px 25px; border-radius: 30px; text-decoration: none; box-shadow: 0 4px 10px rgba(0,0,0,0.2); font-weight: bold;">
+        🏠 홈으로 돌아가기
+    </a>
+</div>
+
+</body>
+</html>
