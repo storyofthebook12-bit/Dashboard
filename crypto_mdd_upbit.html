@@ -3,9 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>암호화폐 정밀 분석 (5Y/10Y Added)</title>
+    <title>암호화폐 정밀 분석 (Web Version)</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
+        /* 기존 스타일 유지 */
         :root {
             --toss-blue: #3182f6;
             --toss-red: #f04452;
@@ -134,11 +135,9 @@
         
         .chart-container { position: relative; height: 350px; width: 100%; }
         
-        /* 색상 유틸리티 */
         .text-blue { color: var(--toss-blue) !important; }
         .text-red { color: var(--toss-red) !important; }
         
-        /* 바 그래프 스타일 */
         .bar-bg { height: 6px; background-color: var(--toss-grey); border-radius: 3px; margin-top: 10px; overflow: hidden; display: flex; }
         .bar-fill { height: 100%; transition: width 0.5s ease-out; }
         .bar-fill.blue { background-color: var(--toss-blue) !important; }
@@ -155,9 +154,18 @@
 
         #source-info { text-align: center; color: #aaa; font-size: 12px; margin-top: 20px; padding-bottom: 20px; }
         #sort-status { font-size: 12px; color: #3182f6; text-align: right; margin-bottom: 5px; font-weight: 600; }
+        
+        /* 로딩/에러 표시 */
+        #loading-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(255,255,255,0.8); z-index: 999; display: none;
+            justify-content: center; align-items: center; font-weight: 600; color: var(--toss-blue);
+        }
     </style>
 </head>
 <body>
+
+<div id="loading-overlay">데이터를 안전하게 불러오는 중...</div>
 
 <div class="container">
     <div class="header-row">
@@ -251,11 +259,14 @@
     </div>
     
     <div id="source-info">
-        데이터: Upbit API (Price) / CoinGecko (Rank)
+        데이터: Upbit API (via Proxy)
     </div>
 </div>
 
 <script>
+    // [중요] CORS 문제 해결을 위한 프록시 URL
+    const PROXY_URL = 'https://corsproxy.io/?';
+
     let currentMarket = 'KRW-BTC'; 
     let currentSymbol = 'BTC';
     let currentCurrency = 'krw'; 
@@ -279,8 +290,8 @@
     const highPriceEl = document.getElementById('period-high');
     const lowPriceEl = document.getElementById('period-low');
     const sortStatusEl = document.getElementById('sort-status');
+    const loadingOverlay = document.getElementById('loading-overlay');
 
-    // 브랜드 컬러 & 고채도 팔레트
     const brandColors = {
         'BTC': '#F7931A', 'ETH': '#627EEA', 'XRP': '#00AEEF',
         'SOL': '#9945FF', 'DOGE': '#C2A633', 'ADA': '#0033AD',
@@ -303,10 +314,18 @@
         document.documentElement.style.setProperty('--theme-color', color);
     };
 
+    // [수정] 프록시를 통해 API 호출하는 헬퍼 함수
+    async function fetchWithProxy(url) {
+        // 인코딩하여 프록시 뒤에 붙임
+        const target = PROXY_URL + encodeURIComponent(url);
+        const res = await fetch(target);
+        if (!res.ok) throw new Error(`Fetch Error: ${res.status}`);
+        return await res.json();
+    }
+
     async function fetchUsdRate() {
         try {
-            const res = await fetch('https://api.upbit.com/v1/ticker?markets=KRW-USDT');
-            const data = await res.json();
+            const data = await fetchWithProxy('https://api.upbit.com/v1/ticker?markets=KRW-USDT');
             usdtRate = data[0].trade_price;
         } catch(e) { console.log('환율 기본값 사용'); }
     }
@@ -335,14 +354,13 @@
         }
     };
 
-    // 하이브리드 리스트 로직
     async function fetchCoinList() {
+        loadingOverlay.style.display = 'flex';
         try {
             await fetchUsdRate();
 
-            // 1. 업비트 전체 마켓
-            const upbitRes = await fetch('https://api.upbit.com/v1/market/all?isDetails=false');
-            const upbitAll = await upbitRes.json();
+            // [수정] 프록시 사용
+            const upbitAll = await fetchWithProxy('https://api.upbit.com/v1/market/all?isDetails=false');
             
             const krwMarkets = upbitAll.filter(m => m.market.startsWith('KRW-'));
             const upbitMap = {}; 
@@ -351,12 +369,10 @@
                 upbitMap[sym] = { market: m.market, name: m.korean_name };
             });
 
-            // 2. CoinGecko Top 100 (시총 순)
             let sortedList = [];
             try {
-                const cgRes = await fetch('https://api.coingecko.com/api/v3/coins/markets?vs_currency=krw&order=market_cap_desc&per_page=100&page=1&sparkline=false');
-                if(!cgRes.ok) throw new Error("CG Rate Limit");
-                const cgList = await cgRes.json();
+                // [수정] 프록시 사용 (CoinGecko)
+                const cgList = await fetchWithProxy('https://api.coingecko.com/api/v3/coins/markets?vs_currency=krw&order=market_cap_desc&per_page=100&page=1&sparkline=false');
                 
                 cgList.forEach(cg => {
                     const sym = cg.symbol.toUpperCase();
@@ -368,13 +384,13 @@
                         });
                     }
                 });
-                sortStatusEl.innerText = "✨ 시가총액 순 정렬 (CoinGecko)";
+                sortStatusEl.innerText = "✨ 시가총액 순 (Via Proxy)";
 
             } catch (cgError) {
-                console.warn("CoinGecko 차단됨, 업비트 거래량 순으로 대체");
+                console.warn("CoinGecko Load Fail, Fallback to Upbit Volume");
                 const marketsStr = krwMarkets.map(m => m.market).join(',');
-                const tickerRes = await fetch(`https://api.upbit.com/v1/ticker?markets=${marketsStr}`);
-                const tickers = await tickerRes.json();
+                // [수정] 프록시 사용
+                const tickers = await fetchWithProxy(`https://api.upbit.com/v1/ticker?markets=${marketsStr}`);
                 tickers.sort((a, b) => b.acc_trade_price_24h - a.acc_trade_price_24h);
                 
                 sortedList = tickers.map(t => {
@@ -385,7 +401,7 @@
                         korean_name: info.korean_name
                     };
                 });
-                sortStatusEl.innerText = "⚠️ 시총 정보 조회 실패 (거래대금 순 정렬)";
+                sortStatusEl.innerText = "⚠️ 거래대금 순 정렬";
             }
 
             if(sortedList.length > 100) sortedList = sortedList.slice(0, 100);
@@ -395,7 +411,9 @@
 
         } catch (e) {
             console.error(e);
-            alert("초기화 실패. 인터넷 연결을 확인하세요.");
+            alert("초기화 실패 (" + e.message + "). 인터넷 상태나 프록시 상태를 확인하세요.");
+        } finally {
+            loadingOverlay.style.display = 'none';
         }
     }
 
@@ -474,8 +492,8 @@
         document.querySelector('.chart-container').style.opacity = '0.5';
         try {
             let unit = 'days'; 
-            let fetchCount = 30; // API에 요청할 갯수
-            let targetCount = 30; // 실제 필요한 일수
+            let fetchCount = 30; 
+            let targetCount = 30; 
             let toDate = ''; 
 
             if (fetchMode === 'preset') {
@@ -485,18 +503,15 @@
                 targetCount = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
             }
 
-            // 정확한 캔들 갯수 및 단위 계산 (5년, 10년 포함)
             fetchCount = targetCount; 
             if (targetCount > 200) {
                 unit = 'weeks';
                 fetchCount = Math.ceil(targetCount / 7); 
             }
-            if (targetCount > 730) { // 2년 이상 월봉
+            if (targetCount > 730) { 
                 unit = 'months';
                 fetchCount = Math.ceil(targetCount / 30);
             }
-
-            // 업비트 최대 200개 제한
             if (fetchCount > 200) fetchCount = 200;
 
             if (fetchMode === 'custom') {
@@ -505,14 +520,12 @@
                 toDate = `&to=${d.toISOString()}`;
             }
 
+            // [수정] 프록시 사용
             const url = `https://api.upbit.com/v1/candles/${unit}?market=${currentMarket}&count=${fetchCount}${toDate}`;
-            const res = await fetch(url);
-            if (!res.ok) throw new Error("Upbit API Error");
+            const data = await fetchWithProxy(url);
             
-            let data = await res.json();
             data.reverse();
 
-            // 정확한 날짜 필터링
             let cutOffDate;
             if (fetchMode === 'preset') {
                 cutOffDate = new Date();
@@ -520,12 +533,12 @@
             } else {
                 cutOffDate = customStartDate;
             }
-            data = data.filter(c => new Date(c.candle_date_time_kst) >= cutOffDate);
+            const filteredData = data.filter(c => new Date(c.candle_date_time_kst) >= cutOffDate);
 
-            if (data.length === 0) { alert("데이터 없음"); return; }
+            if (filteredData.length === 0) { alert("데이터 없음"); return; }
 
-            calculateStats(data);
-            renderChart(data);
+            calculateStats(filteredData);
+            renderChart(filteredData);
 
         } catch (e) {
             console.error(e);
@@ -547,7 +560,6 @@
 
         candles.forEach(c => {
             const price = c.trade_price;
-            
             if (c.high_price > periodHigh) periodHigh = c.high_price;
             if (c.low_price < periodLow) periodLow = c.low_price;
 
@@ -670,7 +682,6 @@
             const lPrice = dataset.data[lIdx];
             ctx.textAlign = 'right';
             let eY = lY - 8; if(eY < top + 15) eY = lY + 25;
-            // 우측 가격 검정색 고정
             ctx.fillStyle = '#191f28'; 
             ctx.fillText(formatPrice(lPrice), lX, eY);
             ctx.restore();
@@ -679,12 +690,6 @@
 
     fetchCoinList();
 </script>
-
-<div style="position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 9999;">
-    <a href="index.html" style="background-color: #333; color: white; padding: 12px 25px; border-radius: 30px; text-decoration: none; box-shadow: 0 4px 10px rgba(0,0,0,0.2); font-weight: bold;">
-        🏠 홈으로 돌아가기
-    </a>
-</div>
 
 </body>
 </html>
